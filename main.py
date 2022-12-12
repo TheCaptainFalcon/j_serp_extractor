@@ -35,19 +35,43 @@ df = pd.concat([pd.DataFrame(df), pd.json_normalize(df['detected_extensions'])],
 # need to remove as it repeats detected extensions but is a list -- cannot use normalize (and is pointless)
 df = df.drop(columns='extensions', axis=1)
 
-# print(df.head(5))
+tech_stack = [
+    'sql', 'excel', 'tableau', 'python'
+]
 
-jobs_df = df
+yoe =  [
+    '0', '1', '2', '3'
+]
+
+# print(df.head(5))
 
 # create table in mysql db -- only needed for initial setup
 # engine.execute('create database data_jobs')
 
 # change to append after finalising sample source
-jobs_df.to_sql('jobs', con=engine, if_exists='append')
+# jobs_df = df.to_sql('jobs', con=engine, if_exists='append')
 
 # checking if returns data correctly
 # print(engine.execute('SELECT title FROM jobs').fetchall())
 
+# unbelievable... song and dance needed just to pass the % wildcard. Need to do this multiple times tho...
+tech_stack_filter = (
+    "SELECT title, company_name FROM jobs WHERE description LIKE %(sql)s OR description LIKE %(excel)s OR description LIKE %(tableau)s OR description LIKE %(python)s"
+    )
 
+# sql = {'%' + 'sql' + '%'}
+# excel = {'%' + 'excel' + '%'}
+
+tech_jobs = pd.read_sql(
+    tech_stack_filter, 
+    con=engine, 
+    params={
+        'sql': '%' + 'sql' + '%',
+        'excel' : '%' + 'excel' + '%',
+        'tableau' : '%' + 'tableau' + '%',
+        'python' : '%' + 'python' + '%'
+    })
+
+print(tech_jobs)
 
 
