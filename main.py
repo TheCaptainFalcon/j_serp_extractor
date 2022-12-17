@@ -95,16 +95,19 @@ combination_filter = (
     description NOT LIKE %(masters_4)s"
 )
 
+# may need to add another case statement in the last query above for 1|0 determining whether a job is remote (anywhere) or hybrid/onsite
+
 # __ accounts for if they use apostrophe after the s (plus a space)
 combination_dict = {
     'sql' : '%' + 'sql' + '%',
     'excel' : '%' + 'excel' + '%',
     'tableau' : '%' + 'tableau' + '%',
     'python' : '%' + 'python' + '%',
-    'yoe_0' : '%' + '0' + '%',
-    'yoe_1' : '%' + '1' + '%',
-    'yoe_2' : '%' + '2' + '%',
-    'yoe_3' : '%' + '3' + '%',
+    # need to remove the 2nd %, as this would include yoe requiring 15 or 25 years.
+    'yoe_0' : '%' + '0',
+    'yoe_1' : '%' + '1',
+    'yoe_2' : '%' + '2',
+    'yoe_3' : '%' + '3',
     'masters_1' : '%' + "master's" + '%', 
     'masters_2' : '%' + "master's__degree" + '%', 
     'masters_3' : '%' + "masters_degree" + '%', 
