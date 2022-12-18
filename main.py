@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 import os
 import traceback
 from datetime import date
+import streamlit as st
 
 # pathing to direct the env vars
 current_path = os.getcwd()
@@ -56,7 +57,8 @@ combination_filter = (
             description, \
             posted_at, \
             substring_index(posted_at, ' ', 1) as posted_at_int, \
-            inserted_at \
+            inserted_at, \
+            salary \
         from jobs \
         WHERE description LIKE %(sql)s OR \
         description LIKE %(excel)s OR \
@@ -74,7 +76,8 @@ combination_filter = (
                 WHEN posted_at LIKE %(hour)s THEN ROUND(posted_at_int / 24, 2) \
                 ELSE posted_at_int \
             END AS posted_by_day, \
-            inserted_at \
+            inserted_at, \
+            salary \
         FROM tech_stack \
         WHERE description LIKE %(yoe_0)s OR \
         description LIKE %(yoe_1)s OR \
@@ -82,18 +85,25 @@ combination_filter = (
         description LIKE %(yoe_3)s \
     ) \
     SELECT \
-            title, \
-            company_name, \
-            location, \
-            via, \
-            posted_by_day, \
-            inserted_at \
+        title, \
+        company_name, \
+        location, \
+        via, \
+        description, \
+        posted_by_day, \
+        inserted_at, \
+        salary \
     FROM yoe \
     WHERE description NOT LIKE %(masters_1)s AND \
     description NOT LIKE %(masters_2)s AND \
     description NOT LIKE %(masters_3)s AND \
     description NOT LIKE %(masters_4)s"
 )
+
+# testing
+# combination_filter = (
+#     'select * from jobs'
+# )
 
 # may need to add another case statement in the last query above for 1|0 determining whether a job is remote (anywhere) or hybrid/onsite
 
@@ -103,14 +113,14 @@ combination_dict = {
     'excel' : '%' + 'excel' + '%',
     'tableau' : '%' + 'tableau' + '%',
     'python' : '%' + 'python' + '%',
-    # need to remove the 2nd %, as this would include yoe requiring 15 or 25 years.
-    'yoe_0' : '%' + '0',
-    'yoe_1' : '%' + '1',
-    'yoe_2' : '%' + '2',
-    'yoe_3' : '%' + '3',
-    'masters_1' : '%' + "master's" + '%', 
-    'masters_2' : '%' + "master's__degree" + '%', 
-    'masters_3' : '%' + "masters_degree" + '%', 
+    # actually, removing the 2nd % messes up the chain as it returns nothing
+    'yoe_0' : '%' + '0' + '%',
+    'yoe_1' : '%' + '1' + '%',
+    'yoe_2' : '%' + '2' + '%',
+    'yoe_3' : '%' + '3' + '%',
+    'masters_1' : '%' + "master's" + '%',
+    'masters_2' : '%' + "master's__degree" + '%',
+    'masters_3' : '%' + "masters_degree" + '%',
     'masters_4' : '%' + 'masters_in' + '%',
     'hour' : '%' + 'hour' + '%'
 }
@@ -133,3 +143,10 @@ def filtered_jobs_to_csv():
         print('Filtered job CSV has been updated!')
 
 filtered_jobs_to_csv()
+
+# st.write("""
+# # my first app
+# Hello asdlkj
+# """)
+
+# st.line_chart(df)
