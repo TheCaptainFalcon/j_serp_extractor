@@ -26,29 +26,58 @@ host = os.getenv('HOST')
 port = os.getenv('PORT')
 database = os.getenv('DATABASE')
 api_key = os.getenv('SERPAPI_KEY')
+query_1 = os.getenv('QUERY_1')
+query_2 = os.getenv('QUERY_2')
 
 # python 3+ need to install pymysql and add to mysql
 engine = create_engine('mysql+pymysql://{0}:{1}@{2}:{3}/{4}'.format(user, password, host, port, database))
 
-# sample data from source
-json_source = 'https://serpapi.com/searches/c2747cffe0cd36d6/6396359cf26ac6a892cab1ca.json'
-j = requests.get(url=json_source)
-content = json.loads(j.content)
+# refactor to function form
 
-# normalizing the detected_extensions into a readable/usable column
-df = pd.DataFrame.from_dict(content['jobs_results'])
-df = pd.concat([pd.DataFrame(df), pd.json_normalize(df['detected_extensions'])], axis=1).drop(columns='detected_extensions')
-# need to remove as it repeats detected extensions but is a list -- cannot use normalize (and is pointless)
-df = df.drop(columns='extensions', axis=1)
+def get_jobs_df(url):
+    response = requests.get(url=url)
+    content = json.loads(response.content)
+    df = pd.DataFrame.from_dict(content['jobs_results'])
+    df = pd.concat([pd.DataFrame(df), pd.json_normalize(df['detected_extensions'])], axis=1).drop(columns='detected_extensions')
+    df = df.drop(columns='extensions', axis=1)
+    return df
 
-# to distinguish data point for when script inserted this record into db
-df['inserted_at'] = date.today()
+# active json -- 100 api calls/month (4x at 5 wkday = 80 (with 20 as failsafe))
+# location based 1
+local_1 = f'https://serpapi.com/search?engine=google_jobs&q={query_1}&location=atlanta+ga+united+states&google_domain=google.com&hl=en&gl=us&lrad=49&device=desktop&api_key={api_key}'
+
+# location based 2
+local_2 = f'https://serpapi.com/search?engine=google_jobs&q={query_2}&location=atlanta+ga+united+states&google_domain=google.com&hl=en&gl=us&lrad=49&device=desktop&api_key={api_key}'
+
+# remote based 1
+remote_1 = f'https://serpapi.com/search?engine=google_jobs&q={query_1}&location=united+states&google_domain=google.com&hl=en&gl=us&ltype=1&lrad=49&device=desktop&api_key={api_key}'
+
+# remote based 2
+remote_2 = f'https://serpapi.com/search?engine=google_jobs&q={query_2}&location=united+states&google_domain=google.com&hl=en&gl=us&ltype=1&lrad=49&device=desktop&api_key={api_key}'
+
+# sample data
+ldf_1 = get_jobs_df(local_1)
+ldf_2 = get_jobs_df(local_2)
+rdf_1 = get_jobs_df(remote_1)
+rdf_2 = get_jobs_df(remote_2)
+
+# union type conversion
+merged_df = pd.merge(
+    ldf_1, 
+    ldf_2, 
+    rdf_1, 
+    rdf_2, 
+    how='outer'
+)
+
+# create the inserted_at after the merge (in case timestamp creates two separate instances)
+merged_df['inserted_at'] = date.today()
 
 # create table in mysql db -- only needed for initial setup
 # engine.execute('create database data_jobs')
 
 # change to append after finalising sample source
-# df.to_sql('jobs', con=engine, if_exists='replace')
+# merged_df.to_sql('jobs', con=engine, if_exists='append')
 
 # In order to use wildcards, must use %(insert name)s -- dictionary can be setup within the params flag, but its cleaner to separate into a variable
 combination_filter = (
@@ -101,13 +130,6 @@ combination_filter = (
     description NOT LIKE %(masters_4)s"
 )
 
-# testing
-# combination_filter = (
-#     'select * from jobs'
-# )
-
-# may need to add another case statement in the last query above for 1|0 determining whether a job is remote (anywhere) or hybrid/onsite
-
 # __ accounts for if they use apostrophe after the s (plus a space)
 combination_dict = {
     'sql' : '%' + 'sql' + '%',
@@ -143,10 +165,9 @@ def filtered_jobs_to_csv():
     else:
         print('Filtered job CSV has been updated!')
 
-# filtered_jobs_to_csv()
+filtered_jobs_to_csv()
 
 # creates a csv to manipulate data and not disrupt original data
-
 job_report = pd.read_csv('filtered_jobs.csv')
 job_report.loc[job_report['location'].str.lower() == 'anywhere', 'remote'] = "Yes"
 job_report.loc[job_report['location'].str.lower() != 'anywhere', 'remote'] = "No"
@@ -170,7 +191,6 @@ yesterday_job_count = date_job_count(format_yesterday)
 two_days_ago_job_count =  date_job_count(format_two_days_ago)
 
 # needs ranged conditional
-
 def ranged_date_job_count(target_date_before, target_date_after):
     job_count_by_date = len(job_report[job_report['inserted_at']])
     (job_count_by_date >= target_date_before) & (job_count_by_date <= target_date_after)
@@ -180,22 +200,11 @@ two_weeks_ago_job_count = ranged_date_job_count(format_two_weeks_ago, format_wee
 # total count
 total_job_count = len(job_report)
 
-# old code (prior to refactor)
-# yesterday = today - timedelta(days = 1)
-# two_days_ago = today - timedelta(days = 2)
-# week_ago = today = timedelta(weeks = 1)
-# two_weeks_ago = today = timedelta(weeks = 2)
-
-# format_today = today.strftime("%m/%d/%Y")
-# format_yesterday = yesterday.strftime('%m/%d/%Y')
-# format_two_days_ago = two_days_ago.strftime('%m/%d/%Y')
-# format_week_ago = week_ago.strftime('%m/%d/%Y')
-# format_two_weeks_ago = two_weeks_ago.strftime('%m/%d/%Y')
-
-
 # Data integrity/check
 today_counter = (yesterday_job_count -  today_job_count)
 
+
+# mostly for testing
 def curr_counter():
     if today_counter == 0:
         print(today_counter)
@@ -254,22 +263,22 @@ salary_arr = []
 # -1 means False; could not find specified str
 for i, v in enumerate(jb):
     # within the description column, find if theres both a dollar sign and the word salary
-    if v.lower().find('$') != -1 and v.lower().find('salary') != -1:
+    if '$' in v.lower() and 'salary' in v.lower():
         # if true, see if theres a per year contained inside
-        if v.lower().find('per year'):
+        if 'per year' in v.lower():
             ds_1 = v.lower().find('$')
             ds_2 = v.lower().rfind('$')
             # if true, slice a chunk of the data based on both the first and second instances of the dollar signs
             ds_salary_1 = jb[i][ds_1 : ds_1 + 7]
             ds_salary_2 = jb[i][ds_2 : ds_2 + 7]
             # after checking if it has a per year, check if theres a comma contained within the sliced data
-            if ds_salary_1.find(',') != -1:
+            if ',' in ds_salary_1:
                 comma_salary_1 = int(ds_salary_1.replace('$' , '').replace(',' , ''))
                 comma_salary_2 = int(ds_salary_2.replace('$' , '').replace(',' , ''))
                 avg_comma_salary = int((comma_salary_1 + comma_salary_2) / 2)
                 salary_arr.append(avg_comma_salary)
             # if it doesnt have a comma, then look to see if theres a k in there
-            if ds_salary_1.find('k') != -1:
+            if 'k' in ds_salary_1:
                 k_salary_1 = ds_salary_1.replace('$' , '').replace('k' , '')
                 k_salary_2 = ds_salary_2.replace('$' , '').replace('k' , '')
             # after finding the k, it needs to further slice the data to be usable
@@ -278,7 +287,7 @@ for i, v in enumerate(jb):
                 avg_k_salary = int(((k_salary_new_1 + k_salary_new_2) / 2) * 1000)
                 salary_arr.append(avg_k_salary)
         # after finding a dollar sign and salary, but not a per year, this checcks if it has a per hour
-        if v.lower().find('per hour') != -1:
+        if 'per hour' in v.lower():
             hr_salary_1 = int(jb[i][ds_1:ds_1+3].replace('$' , '').strip())
             hr_salary_2 = int(jb[i][ds_2:ds_2+3].replace('$' , '').strip())
             avg_hr_salary = int(((hr_salary_1 + hr_salary_2) / 2) * 2080)
@@ -291,33 +300,24 @@ for i, v in enumerate(jb):
 job_report['new_salary'] = salary_arr
 
 
-# Skillset columns - Check to see which rows contain which of the skills
-sql = []
-excel = []
-python = []
-tableau = []
-tech_stack = ['sql', 'excel', 'python', 'tableau']
-tech_stack_var = [sql, excel, python, tableau]
+# refactor, performance wise this is an improvement over previous code. List comprehension
+tech_stack = { 
+    'sql' : [], 
+    'excel' : [], 
+    'python' : [] , 
+    'tableau' : []
+}
 
 def tech_arr():
     job_des = job_report['description']
-    # loop through the all the rows in column 'description'
-    for i, v in enumerate(job_des):
-        # loop through all the items in the tech_stack array
-        for index, value in enumerate(tech_stack):
-            # within each description index look to see if theres any of the tech stacks contained, if it does then apply a 1 to the tech specific array
-            if job_des[i].lower().find(value) != -1:
-                tech_stack_var[index].append(1)
-            else:
-                tech_stack_var[index].append(0)
+    for value in tech_stack:
+        tech_stack[value] = [1 if value in x.lower() else 0 for x in job_des]
 
 tech_arr()
 
 # create the skills columns
-job_report['sql'] = sql
-job_report['excel'] = excel
-job_report['python'] = python
-job_report['tableau'] = tableau
+
+job_report.update(tech_stack)
 
 # create the visuals
 # Data Analyst Jobs by Date
