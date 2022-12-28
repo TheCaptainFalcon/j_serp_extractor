@@ -12,6 +12,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import datapane as dp
 from pytrends.request import TrendReq
+from time import sleep
 
 # pathing to direct the env vars
 current_path = os.getcwd()
@@ -38,8 +39,15 @@ def get_jobs_df(url):
     response = requests.get(url=url)
     content = json.loads(response.content)
     df = pd.DataFrame.from_dict(content['jobs_results'])
-    df = pd.concat([pd.DataFrame(df), pd.json_normalize(df['detected_extensions'])], axis=1).drop(columns='detected_extensions')
-    df = df.drop(columns='extensions', axis=1)
+    df = pd.concat([pd.DataFrame(df), pd.json_normalize(df['detected_extensions'])], axis=1)
+    try:
+        df = df.drop(columns=['detected_extensions','extensions', 'job_highlights', 'related_links', 'thumbnail', 'job_id', 'work_from_home'])
+    except (KeyError, ValueError):
+        print('An exception was raised')
+        pass
+    df['inserted_at'] = date.today()
+    # test
+    print(df)
     return df
 
 # active json -- 100 api calls/month (4x at 5 wkday = 80 (with 20 as failsafe))
@@ -55,34 +63,54 @@ remote_1 = f'https://serpapi.com/search?engine=google_jobs&q={query_1}&location=
 # remote based 2
 remote_2 = f'https://serpapi.com/search?engine=google_jobs&q={query_2}&location=united+states&google_domain=google.com&hl=en&gl=us&ltype=1&lrad=49&device=desktop&api_key={api_key}'
 
-# sample data
+# api data
 ldf_1 = get_jobs_df(local_1)
 ldf_2 = get_jobs_df(local_2)
 rdf_1 = get_jobs_df(remote_1)
 rdf_2 = get_jobs_df(remote_2)
 
 # union type conversion
-merged_df = pd.merge(
-    ldf_1, 
-    ldf_2, 
-    rdf_1, 
-    rdf_2, 
-    how='outer'
-)
+# merge can only merge 2 dataframes at a time
+# merged_df_local = pd.merge(
+#     ldf_1, 
+#     ldf_2, 
+#     how='outer'
+# )
+
+# merged_df_remote = pd.mnrge(
+#     rdf_1,
+#     rdf_2,
+#     how='outer'
+# )
+
+# merged_df = pd.merge(
+#     merged_df_local,
+#     merged_df_remote,
+#     how='outer'
+# )
 
 # create the inserted_at after the merge (in case timestamp creates two separate instances)
-merged_df['inserted_at'] = date.today()
+# merged_df['inserted_at'] = date.today()
 
 # create table in mysql db -- only needed for initial setup
 # engine.execute('create database data_jobs')
 
 # change to append after finalising sample source
-# merged_df.to_sql('jobs', con=engine, if_exists='append')
+def load_sql(source):
+    source.to_sql('jobs', con=engine, if_exists='append')
+
+# ldf_1.to_sql('jobs', con=engine, if_exists='append')
+
+load_sql(ldf_1)
+load_sql(ldf_2)
+load_sql(rdf_1)
+load_sql(rdf_2)
+
 
 # In order to use wildcards, must use %(insert name)s -- dictionary can be setup within the params flag, but its cleaner to separate into a variable
 combination_filter = (
     "WITH tech_stack as ( \
-        DISTINCT SELECT \
+        SELECT DISTINCT \
             title, \
             company_name, \
             location, \
@@ -164,6 +192,7 @@ def filtered_jobs_to_csv():
         traceback.print_exc()
     else:
         print('Filtered job CSV has been updated!')
+        sleep(5)
 
 filtered_jobs_to_csv()
 
@@ -174,7 +203,7 @@ job_report.loc[job_report['location'].str.lower() != 'anywhere', 'remote'] = "No
 job_report['inserted_at'] = pd.to_datetime(job_report['inserted_at']).dt.normalize()
 
 def date_formatter(target_date):
-    target_date.strftime('%m/%d/%Y')
+   return target_date.strftime('%Y-%m-%d')
 
 today = date.today()
 format_today = date_formatter(today)
@@ -184,19 +213,21 @@ format_week_ago = date_formatter((today - timedelta(weeks = 1)))
 format_two_weeks_ago = date_formatter((today - timedelta(weeks = 2)))
 
 def date_job_count(target_date):
-    len(job_report[job_report['inserted_at'] == target_date])
+   return len(job_report[job_report['inserted_at'] == target_date])
 
 today_job_count = date_job_count(format_today)
 yesterday_job_count = date_job_count(format_yesterday)
 two_days_ago_job_count =  date_job_count(format_two_days_ago)
 
-# needs ranged conditional
-def ranged_date_job_count(target_date_before, target_date_after):
-    job_count_by_date = len(job_report[job_report['inserted_at']])
-    (job_count_by_date >= target_date_before) & (job_count_by_date <= target_date_after)
+# needs ranged conditional -- not needed
+# def ranged_date_job_count(target_date_before, target_date_after):
+#     job_count_by_date = len(job_report[job_report['inserted_at']])
+#     return (job_count_by_date >= target_date_before) & (job_count_by_date <= target_date_after)
 
-week_job_count = ranged_date_job_count(format_week_ago, format_today)
-two_weeks_ago_job_count = ranged_date_job_count(format_two_weeks_ago, format_week_ago)
+# this and i presume most of the other date based calcs return errors until enough time (and data) has been passed/created
+# week_job_count = ranged_date_job_count(format_week_ago, format_today)
+# two_weeks_ago_job_count = ranged_date_job_count(format_two_weeks_ago, format_week_ago)
+
 # total count
 total_job_count = len(job_report)
 
@@ -216,9 +247,18 @@ def curr_counter():
 # curr_counter()
 
 # Create Remote columns
-job_loc = job_report[job_report['location'].str.lower()]
-remote = job_loc == 'anywhere'
-onsite = job_loc != 'anywhere'
+# def remote_column_creator():
+#     try:
+#         job_loc = job_report[job_report['location'].str.lower()]
+#         remote = job_loc == 'anywhere'
+#         onsite = job_loc != 'anywhere'
+#     except:
+#         print('location not found, retrying in 3s')
+#         sleep(3)
+#         remote_column_creator()
+
+
+
 
 
 # Create Weekly Job chart for Report
@@ -235,19 +275,19 @@ weekly_fig = px.histogram(
 # Compile the Report
 app = dp.App(
     dp.Group(
-        dp.BigNumber(
-            heading = 'Weekly Job Count:',
-            value = week_job_count,
-            change = two_weeks_ago_job_count,
-            is_upward_change = True
-        ),
+        # dp.BigNumber(
+        #     heading = 'Weekly Job Count:',
+        #     value = week_job_count,
+        #     change = two_weeks_ago_job_count,
+        #     is_upward_change = True
+        # ),
         dp.BigNumber(
             heading = 'Jobs added today',
             value = today_job_count,
             change = yesterday_job_count,
             is_upward_change = True
         ),
-        columns = 2,
+        # columns = 2,
     ),
     dp.Plot(weekly_fig),
     dp.DataTable(weekly_report)
@@ -288,6 +328,8 @@ for i, v in enumerate(jb):
                 salary_arr.append(avg_k_salary)
         # after finding a dollar sign and salary, but not a per year, this checcks if it has a per hour
         if 'per hour' in v.lower():
+            ds_1 = v.lower().find('$')
+            ds_2 = v.lower().rfind('$')
             hr_salary_1 = int(jb[i][ds_1:ds_1+3].replace('$' , '').strip())
             hr_salary_2 = int(jb[i][ds_2:ds_2+3].replace('$' , '').strip())
             avg_hr_salary = int(((hr_salary_1 + hr_salary_2) / 2) * 2080)
@@ -346,6 +388,7 @@ pytrends.build_payload(
     timeframe='today 12-m'
 )
 
+# current issue is code 429 just for testing gets flagged very easily
 trend_data = pytrends.interest_over_time()
 trend_data = trend_data.reset_index()
 
