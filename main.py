@@ -118,12 +118,15 @@ combination_filter = (
             description, \
             posted_at, \
             substring_index(posted_at, ' ', 1) as posted_at_int, \
-            inserted_at \
+            inserted_at, \
+            schedule_type, \
+            salary \
         from jobs \
         WHERE description LIKE %(sql)s OR \
         description LIKE %(excel)s OR \
         description LIKE %(tableau)s OR \
-        description LIKE %(python)s \
+        description LIKE %(python)s OR \
+        description LIKE %(powerbi)s \
     ), \
     yoe as ( \
         SELECT \
@@ -136,7 +139,9 @@ combination_filter = (
                 WHEN posted_at LIKE %(hour)s THEN ROUND(posted_at_int / 24, 2) \
                 ELSE posted_at_int \
             END AS posted_by_day, \
-            inserted_at \
+            inserted_at, \
+            schedule_type, \
+            salary \
         FROM tech_stack \
         WHERE description LIKE %(yoe_0)s OR \
         description LIKE %(yoe_1)s OR \
@@ -150,7 +155,9 @@ combination_filter = (
         via, \
         description, \
         posted_by_day, \
-        inserted_at \
+        inserted_at, \
+        schedule_type, \
+        salary \
     FROM yoe \
     WHERE description NOT LIKE %(masters_1)s AND \
     description NOT LIKE %(masters_2)s AND \
@@ -164,6 +171,7 @@ combination_dict = {
     'excel' : '%' + 'excel' + '%',
     'tableau' : '%' + 'tableau' + '%',
     'python' : '%' + 'python' + '%',
+    'powerbi' : '%' + 'power bi' + '%',
     # actually, removing the 2nd % messes up the chain as it returns nothing
     'yoe_0' : '%' + '0' + '%',
     'yoe_1' : '%' + '1' + '%',
@@ -232,17 +240,17 @@ two_days_ago_job_count =  date_job_count(format_two_days_ago)
 total_job_count = len(job_report)
 
 # Data integrity/check
-today_counter = (yesterday_job_count -  today_job_count)
+# today_counter = (yesterday_job_count -  today_job_count)
 
 
 # mostly for testing
-def curr_counter():
-    if today_counter == 0:
-        print(today_counter)
-    if today_counter < 0:
-        print('-', today_counter)
-    else:
-        print(today_counter, '+')
+# def curr_counter():
+#     if today_counter == 0:
+#         print(today_counter)
+#     if today_counter < 0:
+#         print('-', today_counter)
+#     else:
+#         print(today_counter, '+')
 
 # curr_counter()
 
@@ -295,51 +303,161 @@ app = dp.App(
 
 app.upload(name = "Weekly Job Report")
 
+
+
 # Onward to dashboard code
 # Salary column - search, clean, and assign
-jb = job_report['description']
-salary_arr = []
 
-# -1 means False; could not find specified str
-for i, v in enumerate(jb):
-    # within the description column, find if theres both a dollar sign and the word salary
-    if '$' in v.lower() and 'salary' in v.lower():
-        # if true, see if theres a per year contained inside
-        if 'per year' in v.lower():
-            ds_1 = v.lower().find('$')
-            ds_2 = v.lower().rfind('$')
-            # if true, slice a chunk of the data based on both the first and second instances of the dollar signs
-            ds_salary_1 = jb[i][ds_1 : ds_1 + 7]
-            ds_salary_2 = jb[i][ds_2 : ds_2 + 7]
-            # after checking if it has a per year, check if theres a comma contained within the sliced data
-            if ',' in ds_salary_1:
-                comma_salary_1 = int(ds_salary_1.replace('$' , '').replace(',' , ''))
-                comma_salary_2 = int(ds_salary_2.replace('$' , '').replace(',' , ''))
-                avg_comma_salary = int((comma_salary_1 + comma_salary_2) / 2)
-                salary_arr.append(avg_comma_salary)
-            # if it doesnt have a comma, then look to see if theres a k in there
-            if 'k' in ds_salary_1:
-                k_salary_1 = ds_salary_1.replace('$' , '').replace('k' , '')
-                k_salary_2 = ds_salary_2.replace('$' , '').replace('k' , '')
-            # after finding the k, it needs to further slice the data to be usable
-                k_salary_new_1 = int(k_salary_1[0:2])
-                k_salary_new_2 = int(k_salary_2[0:2])
-                avg_k_salary = int(((k_salary_new_1 + k_salary_new_2) / 2) * 1000)
-                salary_arr.append(avg_k_salary)
-        # after finding a dollar sign and salary, but not a per year, this checcks if it has a per hour
-        if 'per hour' in v.lower():
-            ds_1 = v.lower().find('$')
-            ds_2 = v.lower().rfind('$')
-            hr_salary_1 = int(jb[i][ds_1:ds_1+3].replace('$' , '').strip())
-            hr_salary_2 = int(jb[i][ds_2:ds_2+3].replace('$' , '').strip())
-            avg_hr_salary = int(((hr_salary_1 + hr_salary_2) / 2) * 2080)
-            salary_arr.append(avg_hr_salary)
-    # if it doesnt contain a dollar sign or salary from the start, then skip this and call it null
+# testing here
+# job_report = pd.read_excel('filtered_jobs.xlsx')
+
+
+# jb = job_report['description']
+# salary_arr = []
+
+# # -1 means False; could not find specified str
+# for i, v in enumerate(jb):
+#     # within the description column, find if theres both a dollar sign and the word salary
+#     if '$' in v.lower() and 'salary' in v.lower():
+#         # if true, see if theres a per year contained inside
+#         if 'per year' in v.lower():
+#             ds_1 = v.lower().find('$')
+#             ds_2 = v.lower().rfind('$')
+#             # if true, slice a chunk of the data based on both the first and second instances of the dollar signs
+#             ds_salary_1 = jb[i][ds_1 : ds_1 + 7]
+#             ds_salary_2 = jb[i][ds_2 : ds_2 + 7]
+#             # after checking if it has a per year, check if theres a comma contained within the sliced data
+#             if ',' in ds_salary_1:
+#                 comma_salary_1 = int(ds_salary_1.replace('$' , '').replace(',' , ''))
+#                 comma_salary_2 = int(ds_salary_2.replace('$' , '').replace(',' , ''))
+#                 avg_comma_salary = int((comma_salary_1 + comma_salary_2) / 2)
+#                 salary_arr.append(avg_comma_salary)
+#             # if it doesnt have a comma, then look to see if theres a k in there
+#             if 'k' in ds_salary_1:
+#                 k_salary_1 = ds_salary_1.replace('$' , '').replace('k' , '')
+#                 k_salary_2 = ds_salary_2.replace('$' , '').replace('k' , '')
+#             # after finding the k, it needs to further slice the data to be usable
+#                 k_salary_new_1 = int(k_salary_1[0:2])
+#                 k_salary_new_2 = int(k_salary_2[0:2])
+#                 avg_k_salary = int(((k_salary_new_1 + k_salary_new_2) / 2) * 1000)
+#                 salary_arr.append(avg_k_salary)
+#         # after finding a dollar sign and salary, but not a per year, this checcks if it has a per hour
+#         if 'per hour' in v.lower():
+#             ds_1 = v.lower().find('$')
+#             ds_2 = v.lower().rfind('$')
+#             hr_salary_1 = int(jb[i][ds_1:ds_1+3].replace('$' , '').strip())
+#             hr_salary_2 = int(jb[i][ds_2:ds_2+3].replace('$' , '').strip())
+#             avg_hr_salary = int(((hr_salary_1 + hr_salary_2) / 2) * 2080)
+#             salary_arr.append(avg_hr_salary)
+#     # if it doesnt contain a dollar sign or salary from the start, then skip this and call it null
+#     else:
+#         salary_arr.append('null')
+
+# # create the salary column
+# try:
+#     job_report['new_salary'] = salary_arr
+# except:
+#     print('error', salary_arr)
+
+
+# revision of salary data by utilizing existing salary field isntead of using description
+# remove nulls for salary
+sal = job_report.dropna()
+
+for i, v in sal['salary'].items():
+    if 'an hour' in v:
+        sal.loc[i, 'salary_rate'] = 'hour'
+        raw = v.replace('an hour', '').strip()
+        sal.loc[i, 'salary_raw'] = raw
+    if 'a year' in v:
+        sal.loc[i, 'salary_rate'] = 'year'
+        raw = v.replace('a year', '').strip().strip()
+        sal.loc[i, 'salary_raw'] = raw
+
+# K removal in annual salary
+for i, v in sal['salary_raw'].items():
+    if 'K' in v:
+        filter = sal['salary_raw'][i].lower().replace('k', '')
+        sal.loc[i, 'salary_raw'] = filter
     else:
-        salary_arr.append('null')
+        continue
 
-# create the salary column
-job_report['new_salary'] = salary_arr
+value_arr = []
+
+for i, v in sal['salary_raw'].items():
+    # for whatever reason the default dash in the data is an uncommon dash.
+    values1 = v.replace('–', '-')
+    values1 = values1.split('-')
+    value_arr.append(values1)
+
+sal['salary_raw_split'] = value_arr
+
+salary_min = []
+salary_max = []
+
+for i, v in sal['salary_raw_split'].items():
+    if ',' in str(v):
+        salary_min.append(v[0])
+        salary_max.append(v[1])
+    else:
+        salary_min.append(v[0])
+        salary_max.append(v[0])
+
+sal['salary_min'] = salary_min
+sal['salary_max'] = salary_max
+
+# next step creating modified min/max and removing commas
+for i, v in sal['salary_min'].items():
+    remove_comma = v.replace(',' , '')
+    sal.at[i, 'salary_min_mod'] = remove_comma
+
+for i,v in sal['salary_max'].items():
+    remove_comma = v.replace(',' , '')
+    sal.at[i, 'salary_max_mod'] = remove_comma
+
+# salary new is the calculation stage
+
+salary_new = []
+
+for i, row in sal.iterrows():
+    sal_min = row['salary_min_mod']
+    sal_max = row['salary_max_mod']
+    salary_new.append(int((int(float(sal_min)) + int(float(sal_max))) / 2))
+
+sal['salary_new'] = salary_new
+
+#  salary stnd is the finalized salary column
+salary_stnd = []
+
+for i, row in sal.iterrows():
+    salary = row['salary'].lower()
+    sal_rate = row['salary_rate']
+    sal_new = row['salary_new']
+
+    if sal_rate == 'hour':
+        sal_calc = sal_new * 2080
+        salary_stnd.append(sal_calc)
+    if sal_rate == 'year':
+        if 'k' in sal:
+            sal_calc = sal_new * 1000
+            salary_stnd.append(sal_calc)
+        if 'k' not in sal:
+            salary_stnd.append(sal_new)
+
+sal['salary_stnd'] = salary_stnd
+
+# remove the work building up to the final salary column
+sal = sal.drop(columns=[
+    'salary', 
+    'salary_rate', 
+    'salary_raw', 
+    'salary_raw_split', 
+    'salary_min' ,
+    'salary_max', 
+    'salary_min_mod', 
+    'salary_max_mod', 
+    'salary_new',
+])
 
 
 # refactor, performance wise this is an improvement over previous code. List comprehension
@@ -347,7 +465,8 @@ tech_stack = {
     'sql' : [], 
     'excel' : [], 
     'python' : [] , 
-    'tableau' : []
+    'tableau' : [],
+    'power bi' : []
 }
 
 def tech_arr():
@@ -361,100 +480,105 @@ tech_arr()
 
 job_report.update(tech_stack)
 
+
+# export after tech skills
+# export as excel for google drive (csv columns get wonky with commas)
+job_report.to_excel('filtered_jobs.xlsx', index=False)
+
 # create the visuals
 # Data Analyst Jobs by Date
 
-total_jobs = px.histogram(
-    job_report, 
-    x='inserted_at', 
-    nbins=20, 
-    title='Data Analyst Jobs by Date',
-    color='remote',
-    hover_data={'inserted_at' : ''}
-).update_layout(
-    yaxis_title='Count', 
-    title_font_size=25, 
-    xaxis_title='', 
-    font=dict(size=14)
-)
+# total_jobs = px.histogram(
+#     job_report, 
+#     x='inserted_at', 
+#     nbins=20, 
+#     title='Data Analyst Jobs by Date',
+#     color='remote',
+#     hover_data={'inserted_at' : ''}
+# ).update_layout(
+#     yaxis_title='Count', 
+#     title_font_size=25, 
+#     xaxis_title='', 
+#     font=dict(size=14)
+# )
 
 # Data Analytics Interest by Date (Google Search Trends)
-pytrends = TrendReq()
+# pytrends = TrendReq()
 
-kw_list=['data analytics', 'data science']
-pytrends.build_payload(
-    kw_list, 
-    cat=0, 
-    timeframe='today 12-m'
-)
+# kw_list=['data analytics', 'data science']
+# pytrends.build_payload(
+#     kw_list, 
+#     cat=0, 
+#     timeframe='today 12-m'
+# )
 
 # current issue is code 429 just for testing gets flagged very easily
-trend_data = pytrends.interest_over_time()
-trend_data = trend_data.reset_index()
+# trend_data = pytrends.interest_over_time()
+# trend_data = trend_data.reset_index()
 
-trend_chart = px.line(
-    trend_data, 
-    x='date', 
-    y=kw_list, 
-    title="Data Analytics Interest by Date"
-).update_layout(
-    xaxis_title='',
-    title_font_size=25, 
-    yaxis_title='Interest', 
-    font=dict(size=14)
-)
+# trend_chart = px.line(
+#     trend_data, 
+#     x='date', 
+#     y=kw_list, 
+#     title="Data Analytics Interest by Date"
+# ).update_layout(
+#     xaxis_title='',
+#     title_font_size=25, 
+#     yaxis_title='Interest', 
+#     font=dict(size=14)
+# )
 
 # Jobs by Skills
-skill_sum = job_report[['sql','excel','python', 'tableau']].sum()
+# skill_sum = job_report[['sql','excel','python', 'tableau']].sum()
 
-skills = px.bar(
-    skill_sum, 
-    title='Jobs by Skills',
-    y=skill_sum[:]
-).update_layout(
-    yaxis_title='Count', 
-    title_font_size=25, 
-    xaxis_title='', 
-    xaxis={'categoryorder': 'total descending'}, 
-    font=dict(size=14)
-)
+# skills = px.bar(
+#     skill_sum, 
+#     title='Jobs by Skills',
+#     y=skill_sum[:]
+# ).update_layout(
+#     yaxis_title='Count', 
+#     title_font_size=25, 
+#     xaxis_title='', 
+#     xaxis={'categoryorder': 'total descending'}, 
+#     font=dict(size=14)
+# )
 
 # Data Analyst Jobs by Skills
-avg_salary = px.histogram(
-    job_report, 
-    title='Data Analyst Jobs by Salary',
-    x='new_salary'
-).update_layout(
-    yaxis_title='Count', 
-    title_font_size=25, 
-    xaxis_title='',
-    font=dict(size=14)
-)
+# avg_salary = px.histogram(
+#     job_report, 
+#     title='Data Analyst Jobs by Salary',
+#     x='new_salary'
+# ).update_layout(
+#     yaxis_title='Count', 
+#     title_font_size=25, 
+#     xaxis_title='',
+#     font=dict(size=14)
+# )
 
 # Compiled Dashboard
-dash = dp.App(
-        dp.Group(
-            dp.BigNumber(
-                heading='Total Job Count:',
-                value=total_job_count
-            ),
-            dp.BigNumber(
-                heading="Jobs added today",
-                value=today_job_count
-            ),         
-            columns=2,
-        ),
-        dp.Group(
-            dp.Plot(total_jobs), 
-            dp.Plot(trend_chart),
-            columns=2,
-        ),
-        dp.Group(
-            dp.Plot(skills),
-            dp.Plot(avg_salary),
-            columns=2,  
-        ),
-        dp.DataTable(job_report)
-)
+# dash = dp.App(
+#         dp.Group(
+#             dp.BigNumber(
+#                 heading='Total Job Count:',
+#                 value=total_job_count
+#             ),
+#             dp.BigNumber(
+#                 heading="Jobs added today",
+#                 value=today_job_count
+#             ),         
+#             columns=2,
+#         ),
+#         dp.Group(
+#             dp.Plot(total_jobs), 
+#             dp.Plot(trend_chart),
+#             columns=2,
+#         ),
+#         dp.Group(
+#             dp.Plot(skills),
+#             dp.Plot(avg_salary),
+#             columns=2,  
+#         ),
+#         dp.DataTable(job_report)
+# )
 
-dash.upload(name="Data Analytics Job Dashboard")
+# dash.upload(name="Data Analytics Job Dashboard")
