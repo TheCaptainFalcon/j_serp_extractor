@@ -191,16 +191,17 @@ combination_jobs = pd.read_sql(
 )
 
 # print(combination_jobs)
+# mode w is default which is overwrite
+# header False is to exclude header when appending new data
 
 def filtered_jobs_to_csv():
     try:
-        combination_jobs.to_csv('filtered_jobs.csv', index=False)
+        combination_jobs.to_csv('filtered_jobs.csv', index=False, mode='a', header=False)
     except Exception:
         print('An error occurred trying to export the filtered job results to a csv', '\n')
         traceback.print_exc()
     else:
         print('Filtered job CSV has been updated!')
-        sleep(5)
 
 filtered_jobs_to_csv()
 
@@ -362,7 +363,8 @@ app.upload(name = "Weekly Job Report")
 
 # revision of salary data by utilizing existing salary field isntead of using description
 # remove nulls for salary
-sal = job_report.dropna()
+job_report = job_report.dropna()
+sal = job_report
 
 for i, v in sal['salary'].items():
     if 'an hour' in v:
@@ -438,26 +440,26 @@ for i, row in sal.iterrows():
         sal_calc = sal_new * 2080
         salary_stnd.append(sal_calc)
     if sal_rate == 'year':
-        if 'k' in sal:
+        if 'K' in sal['salary'][i]:
             sal_calc = sal_new * 1000
             salary_stnd.append(sal_calc)
-        if 'k' not in sal:
+        if 'K' not in sal['salary'][i]:
             salary_stnd.append(sal_new)
 
 sal['salary_stnd'] = salary_stnd
 
 # remove the work building up to the final salary column
-sal = sal.drop(columns=[
-    'salary', 
-    'salary_rate', 
-    'salary_raw', 
-    'salary_raw_split', 
-    'salary_min' ,
-    'salary_max', 
-    'salary_min_mod', 
-    'salary_max_mod', 
-    'salary_new',
-])
+# sal = sal.drop(columns=[
+#     'salary', 
+#     'salary_rate', 
+#     'salary_raw', 
+#     'salary_raw_split', 
+#     'salary_min' ,
+#     'salary_max', 
+#     'salary_min_mod', 
+#     'salary_max_mod', 
+#     'salary_new',
+# ])
 
 
 # refactor, performance wise this is an improvement over previous code. List comprehension
@@ -478,12 +480,29 @@ tech_arr()
 
 # create the skills columns
 
-job_report.update(tech_stack)
+job_report = job_report.assign(**tech_stack)
+
+# create a tech stack counter column for scatter plot
+tech_count_arr = []
+
+for i, row in job_report.iterrows():
+    sql = row['sql']
+    excel = row['excel']
+    python = row['python']
+    tableau = row['tableau']
+    powerbi = row['power bi']
+    tech_stack_count = (sql + excel +python + tableau + powerbi)
+    tech_count_arr.append(tech_stack_count)
+
+job_report['tech_counter'] = tech_count_arr
 
 
 # export after tech skills
 # export as excel for google drive (csv columns get wonky with commas)
-job_report.to_excel('filtered_jobs.xlsx', index=False)
+# pandas v1.4+ if_sheet_exists: 'overlay' (for append)
+
+with pd.ExcelWriter('filtered_jobs.xlsx', mode='a', if_sheet_exists='overlay') as writer:
+    job_report.to_excel(writer, index=False)
 
 # create the visuals
 # Data Analyst Jobs by Date
