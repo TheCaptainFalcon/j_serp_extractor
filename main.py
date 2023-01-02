@@ -69,37 +69,12 @@ ldf_2 = get_jobs_df(local_2)
 rdf_1 = get_jobs_df(remote_1)
 rdf_2 = get_jobs_df(remote_2)
 
-# union type conversion
-# merge can only merge 2 dataframes at a time
-# merged_df_local = pd.merge(
-#     ldf_1, 
-#     ldf_2, 
-#     how='outer'
-# )
-
-# merged_df_remote = pd.mnrge(
-#     rdf_1,
-#     rdf_2,
-#     how='outer'
-# )
-
-# merged_df = pd.merge(
-#     merged_df_local,
-#     merged_df_remote,
-#     how='outer'
-# )
-
-# create the inserted_at after the merge (in case timestamp creates two separate instances)
-# merged_df['inserted_at'] = date.today()
-
 # create table in mysql db -- only needed for initial setup
 # engine.execute('create database data_jobs')
 
 # change to append after finalising sample source
 def load_sql(source):
     source.to_sql('jobs', con=engine, if_exists='append')
-
-# ldf_1.to_sql('jobs', con=engine, if_exists='append')
 
 load_sql(ldf_1)
 load_sql(ldf_2)
@@ -228,47 +203,8 @@ today_job_count = date_job_count(format_today)
 yesterday_job_count = date_job_count(format_yesterday)
 two_days_ago_job_count =  date_job_count(format_two_days_ago)
 
-# needs ranged conditional -- not needed
-# def ranged_date_job_count(target_date_before, target_date_after):
-#     job_count_by_date = len(job_report[job_report['inserted_at']])
-#     return (job_count_by_date >= target_date_before) & (job_count_by_date <= target_date_after)
-
-# this and i presume most of the other date based calcs return errors until enough time (and data) has been passed/created
-# week_job_count = ranged_date_job_count(format_week_ago, format_today)
-# two_weeks_ago_job_count = ranged_date_job_count(format_two_weeks_ago, format_week_ago)
-
 # total count
 total_job_count = len(job_report)
-
-# Data integrity/check
-# today_counter = (yesterday_job_count -  today_job_count)
-
-
-# mostly for testing
-# def curr_counter():
-#     if today_counter == 0:
-#         print(today_counter)
-#     if today_counter < 0:
-#         print('-', today_counter)
-#     else:
-#         print(today_counter, '+')
-
-# curr_counter()
-
-# Create Remote columns
-# def remote_column_creator():
-#     try:
-#         job_loc = job_report[job_report['location'].str.lower()]
-#         remote = job_loc == 'anywhere'
-#         onsite = job_loc != 'anywhere'
-#     except:
-#         print('location not found, retrying in 3s')
-#         sleep(3)
-#         remote_column_creator()
-
-
-
-
 
 # Create Weekly Job chart for Report
 weekly_report = job_report.loc[(job_report['inserted_at'] >= format_week_ago) & (job_report['inserted_at'] <= format_today)]
@@ -303,63 +239,6 @@ app = dp.App(
 )
 
 app.upload(name = "Weekly Job Report")
-
-
-
-# Onward to dashboard code
-# Salary column - search, clean, and assign
-
-# testing here
-# job_report = pd.read_excel('filtered_jobs.xlsx')
-
-
-# jb = job_report['description']
-# salary_arr = []
-
-# # -1 means False; could not find specified str
-# for i, v in enumerate(jb):
-#     # within the description column, find if theres both a dollar sign and the word salary
-#     if '$' in v.lower() and 'salary' in v.lower():
-#         # if true, see if theres a per year contained inside
-#         if 'per year' in v.lower():
-#             ds_1 = v.lower().find('$')
-#             ds_2 = v.lower().rfind('$')
-#             # if true, slice a chunk of the data based on both the first and second instances of the dollar signs
-#             ds_salary_1 = jb[i][ds_1 : ds_1 + 7]
-#             ds_salary_2 = jb[i][ds_2 : ds_2 + 7]
-#             # after checking if it has a per year, check if theres a comma contained within the sliced data
-#             if ',' in ds_salary_1:
-#                 comma_salary_1 = int(ds_salary_1.replace('$' , '').replace(',' , ''))
-#                 comma_salary_2 = int(ds_salary_2.replace('$' , '').replace(',' , ''))
-#                 avg_comma_salary = int((comma_salary_1 + comma_salary_2) / 2)
-#                 salary_arr.append(avg_comma_salary)
-#             # if it doesnt have a comma, then look to see if theres a k in there
-#             if 'k' in ds_salary_1:
-#                 k_salary_1 = ds_salary_1.replace('$' , '').replace('k' , '')
-#                 k_salary_2 = ds_salary_2.replace('$' , '').replace('k' , '')
-#             # after finding the k, it needs to further slice the data to be usable
-#                 k_salary_new_1 = int(k_salary_1[0:2])
-#                 k_salary_new_2 = int(k_salary_2[0:2])
-#                 avg_k_salary = int(((k_salary_new_1 + k_salary_new_2) / 2) * 1000)
-#                 salary_arr.append(avg_k_salary)
-#         # after finding a dollar sign and salary, but not a per year, this checcks if it has a per hour
-#         if 'per hour' in v.lower():
-#             ds_1 = v.lower().find('$')
-#             ds_2 = v.lower().rfind('$')
-#             hr_salary_1 = int(jb[i][ds_1:ds_1+3].replace('$' , '').strip())
-#             hr_salary_2 = int(jb[i][ds_2:ds_2+3].replace('$' , '').strip())
-#             avg_hr_salary = int(((hr_salary_1 + hr_salary_2) / 2) * 2080)
-#             salary_arr.append(avg_hr_salary)
-#     # if it doesnt contain a dollar sign or salary from the start, then skip this and call it null
-#     else:
-#         salary_arr.append('null')
-
-# # create the salary column
-# try:
-#     job_report['new_salary'] = salary_arr
-# except:
-#     print('error', salary_arr)
-
 
 # revision of salary data by utilizing existing salary field isntead of using description
 # remove nulls for salary
@@ -448,20 +327,6 @@ for i, row in sal.iterrows():
 
 sal['salary_stnd'] = salary_stnd
 
-# remove the work building up to the final salary column
-# sal = sal.drop(columns=[
-#     'salary', 
-#     'salary_rate', 
-#     'salary_raw', 
-#     'salary_raw_split', 
-#     'salary_min' ,
-#     'salary_max', 
-#     'salary_min_mod', 
-#     'salary_max_mod', 
-#     'salary_new',
-# ])
-
-
 # refactor, performance wise this is an improvement over previous code. List comprehension
 tech_stack = { 
     'sql' : [], 
@@ -496,108 +361,9 @@ for i, row in job_report.iterrows():
 
 job_report['tech_counter'] = tech_count_arr
 
-
 # export after tech skills
 # export as excel for google drive (csv columns get wonky with commas)
 # pandas v1.4+ if_sheet_exists: 'overlay' (for append)
 
 with pd.ExcelWriter('filtered_jobs.xlsx', mode='a', if_sheet_exists='overlay') as writer:
     job_report.to_excel(writer, index=False)
-
-# create the visuals
-# Data Analyst Jobs by Date
-
-# total_jobs = px.histogram(
-#     job_report, 
-#     x='inserted_at', 
-#     nbins=20, 
-#     title='Data Analyst Jobs by Date',
-#     color='remote',
-#     hover_data={'inserted_at' : ''}
-# ).update_layout(
-#     yaxis_title='Count', 
-#     title_font_size=25, 
-#     xaxis_title='', 
-#     font=dict(size=14)
-# )
-
-# Data Analytics Interest by Date (Google Search Trends)
-# pytrends = TrendReq()
-
-# kw_list=['data analytics', 'data science']
-# pytrends.build_payload(
-#     kw_list, 
-#     cat=0, 
-#     timeframe='today 12-m'
-# )
-
-# current issue is code 429 just for testing gets flagged very easily
-# trend_data = pytrends.interest_over_time()
-# trend_data = trend_data.reset_index()
-
-# trend_chart = px.line(
-#     trend_data, 
-#     x='date', 
-#     y=kw_list, 
-#     title="Data Analytics Interest by Date"
-# ).update_layout(
-#     xaxis_title='',
-#     title_font_size=25, 
-#     yaxis_title='Interest', 
-#     font=dict(size=14)
-# )
-
-# Jobs by Skills
-# skill_sum = job_report[['sql','excel','python', 'tableau']].sum()
-
-# skills = px.bar(
-#     skill_sum, 
-#     title='Jobs by Skills',
-#     y=skill_sum[:]
-# ).update_layout(
-#     yaxis_title='Count', 
-#     title_font_size=25, 
-#     xaxis_title='', 
-#     xaxis={'categoryorder': 'total descending'}, 
-#     font=dict(size=14)
-# )
-
-# Data Analyst Jobs by Skills
-# avg_salary = px.histogram(
-#     job_report, 
-#     title='Data Analyst Jobs by Salary',
-#     x='new_salary'
-# ).update_layout(
-#     yaxis_title='Count', 
-#     title_font_size=25, 
-#     xaxis_title='',
-#     font=dict(size=14)
-# )
-
-# Compiled Dashboard
-# dash = dp.App(
-#         dp.Group(
-#             dp.BigNumber(
-#                 heading='Total Job Count:',
-#                 value=total_job_count
-#             ),
-#             dp.BigNumber(
-#                 heading="Jobs added today",
-#                 value=today_job_count
-#             ),         
-#             columns=2,
-#         ),
-#         dp.Group(
-#             dp.Plot(total_jobs), 
-#             dp.Plot(trend_chart),
-#             columns=2,
-#         ),
-#         dp.Group(
-#             dp.Plot(skills),
-#             dp.Plot(avg_salary),
-#             columns=2,  
-#         ),
-#         dp.DataTable(job_report)
-# )
-
-# dash.upload(name="Data Analytics Job Dashboard")
